@@ -22,12 +22,14 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.hardware.Camera;
+import android.hardware.usb.UsbDevice;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
 import android.widget.Toast;
@@ -42,6 +44,10 @@ import com.google.cardboard.qrcode.QrCodeTracker;
 import com.google.cardboard.qrcode.QrCodeTrackerFactory;
 import com.google.cardboard.qrcode.camera.CameraSource;
 import com.google.cardboard.qrcode.camera.CameraSourcePreview;
+import com.google.cardboard.usb.USBMonitor;
+import com.google.cardboard.usb.USBMonitor.UsbControlBlock;
+import com.google.cardboard.usb.USBMonitor.OnDeviceConnectListener;
+
 import java.io.IOException;
 
 /**
@@ -50,7 +56,9 @@ import java.io.IOException;
  */
 public class QrCodeCaptureActivity extends AppCompatActivity
     implements QrCodeTracker.Listener, QrCodeContentProcessor.Listener {
+  private static final boolean DEBUG = true;
   private static final String TAG = QrCodeCaptureActivity.class.getSimpleName();
+  private static final String MY_TAG = "CardboardSDK";
 
   // Intent request code to handle updating play services if needed.
   private static final int RC_HANDLE_GMS = 9001;
@@ -67,6 +75,12 @@ public class QrCodeCaptureActivity extends AppCompatActivity
   // Flag used to avoid saving the device parameters more than once.
   private static boolean qrCodeSaved = false;
 
+  private USBMonitor mUSBMonitor;
+  private UsbControlBlock mCtrlBlock;
+
+  private final Object mSync = new Object();
+
+
   /** Initializes the UI and creates the detector pipeline. */
   @Override
   public void onCreate(Bundle icicle) {
@@ -74,6 +88,7 @@ public class QrCodeCaptureActivity extends AppCompatActivity
     setContentView(R.layout.qr_code_capture);
 
     cameraSourcePreview = findViewById(R.id.preview);
+    mUSBMonitor = new USBMonitor(this, mOnDeviceConnectListener);
   }
 
   /**
@@ -168,9 +183,14 @@ public class QrCodeCaptureActivity extends AppCompatActivity
       return;
     }
 
-    createCameraSource();
+    //createCameraSource();
     qrCodeSaved = false;
-    startCameraSource();
+    //startCameraSource();
+    synchronized (mSync) {
+      if (mUSBMonitor != null) {
+        mUSBMonitor.register();
+      }
+    }
   }
 
   /** Stops the camera. */
@@ -180,6 +200,11 @@ public class QrCodeCaptureActivity extends AppCompatActivity
     if (cameraSourcePreview != null) {
       cameraSourcePreview.stop();
       cameraSourcePreview.release();
+    }
+    synchronized (mSync) {
+      if (mUSBMonitor != null) {
+        mUSBMonitor.unregister();
+      }
     }
   }
 
@@ -249,4 +274,88 @@ public class QrCodeCaptureActivity extends AppCompatActivity
     }
     qrCodeSaved = false;
   }
+
+  private OnDeviceConnectListener mOnDeviceConnectListener = new OnDeviceConnectListener() {
+    @Override
+    public void onAttach(UsbDevice device) {
+      if ((device.getVendorId() == 0x05A9) && (device.getProductId() == 0x0F87)) {
+        if (!mUSBMonitor.hasPermission(device)) {
+          Toast.makeText(QrCodeCaptureActivity.this, "REQUEST PERMISSION", Toast.LENGTH_SHORT).show();
+        } else {
+          Toast.makeText(QrCodeCaptureActivity.this, "USB_DEVICE_ATTACHED", Toast.LENGTH_SHORT).show();
+          if (DEBUG) Log.v(MY_TAG,
+                  "==== onAttach:" + device.getVendorId() + ":" + device.getProductId());
+        }
+        mUSBMonitor.requestPermission(device);
+        mUSBMonitor.getDeviceInfo(device);
+      }
+    }
+
+    @Override
+    public void onDettach(UsbDevice device) {
+      Toast.makeText(QrCodeCaptureActivity.this, "USB_DEVICE_DETACHED", Toast.LENGTH_SHORT).show();
+      if (DEBUG) Log.v(MY_TAG, "==== onDettach:" + device.getVendorId() + ":" + device.getProductId() );
+    }
+
+    String getUSBFSName(final UsbControlBlock ctrlBlock) {
+      String DEFAULT_USBFS = "/dev/bus/usb";
+      String result = null;
+      final String name = ctrlBlock.getDeviceName();
+      final String[] v = !TextUtils.isEmpty(name) ? name.split("/") : null;
+      if ((v != null) && (v.length > 2)) {
+        final StringBuilder sb = new StringBuilder(v[0]);
+        for (int i = 1; i < v.length - 2; i++) {
+          sb.append("/").append(v[i]);
+        }
+        result = sb.toString();
+      }
+      if (TextUtils.isEmpty(result)) {
+        Log.w(TAG, "failed to get USBFS path, try to use default path:" + name);
+        result = DEFAULT_USBFS;
+      }
+      return result;
+    }
+
+    @Override
+    public void onConnect(UsbDevice device, UsbControlBlock ctrlBlock, boolean createNew) {
+      if (DEBUG) Log.d(MY_TAG, "onConnect");
+      try {
+        mCtrlBlock = ctrlBlock.clone();
+        int devId = mCtrlBlock.getDeviceId();
+        int vid = mCtrlBlock.getVenderId();
+        int pid = mCtrlBlock.getProductId();
+        if (DEBUG) Log.d(MY_TAG, String.format("Device ID = %d\nVID=0x%04x\nPID=0x%04x\n", devId, vid, pid));
+        if ((vid == 0x05A9) && (pid == 0x0F87)) {
+          if (DEBUG) Log.d(MY_TAG,"MATCH FOUND!");
+          String usbfs_path = mCtrlBlock.getDeviceName();
+          if (DEBUG) Log.d(MY_TAG, "usbfs_path = " + usbfs_path);
+          int file_descriptor = mCtrlBlock.getFileDescriptor();
+
+          if (DEBUG) Log.d(MY_TAG, "fd = " + file_descriptor);
+          String usb_fs = getUSBFSName(mCtrlBlock);
+          if (DEBUG) Log.d(MY_TAG, "usb_fs = " + usb_fs);
+          CardboardParamsUtils.setUsbFileDescriptor(mCtrlBlock.getVenderId(), mCtrlBlock.getProductId(),
+                  mCtrlBlock.getFileDescriptor(),
+                  mCtrlBlock.getBusNum(),
+                  mCtrlBlock.getDevNum(),
+                  getUSBFSName(mCtrlBlock));
+          Toast.makeText(QrCodeCaptureActivity.this, "CONNECT_COMPLETED", Toast.LENGTH_SHORT).show();
+        }
+      } catch (IllegalStateException ex) {
+        if (DEBUG) Log.d(MY_TAG, "ex:", ex);
+      } catch (CloneNotSupportedException e) {
+        if (DEBUG) Log.d(MY_TAG, "ex:", e);
+      }
+    }
+
+    @Override
+    public void onDisconnect(UsbDevice device, USBMonitor.UsbControlBlock ctrlBlock) {
+      if (DEBUG) Log.d(MY_TAG, "onDisconnect");
+    }
+
+    @Override
+    public void onCancel(UsbDevice device) {
+      if (DEBUG) Log.d(MY_TAG, "onCancel");
+    }
+  };
 }

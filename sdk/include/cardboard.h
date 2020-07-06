@@ -238,6 +238,13 @@ void CardboardQrCode_destroy(const uint8_t* encoded_device_params);
 /// Scans a QR code and saves the encoded device parameters.
 void CardboardQrCode_scanQrCodeAndSaveDeviceParams();
 
+void CardboardHidSensor_setUsbParams(int vid, int pid, int fd,
+        int busnum, int devaddr, const char *usbfs);
+
+void CardboardHidSensor_setUsbClose();
+
+void CardboardHidSensor_setUsbExit();
+
 #ifdef __cplusplus
 }
 #endif

@@ -20,6 +20,8 @@
 #include "lens_distortion.h"
 #include "qr_code.h"
 #include "screen_params.h"
+#include "sensors/hid_sensor/hid_sensor.h"
+#include "util/logging.h"
 
 // TODO(b/134142617): Revisit struct/class hierarchy.
 struct CardboardLensDistortion : cardboard::LensDistortion {};
@@ -145,7 +147,6 @@ void CardboardHeadTracker_getPose(CardboardHeadTracker* head_tracker,
   std::memcpy(orientation, &out_orientation[0], 4 * sizeof(float));
 }
 
-
 void CardboardQrCode_getSavedDeviceParams(uint8_t** encoded_device_params,
                                           int* size) {
   std::vector<uint8_t> device_params =
@@ -163,4 +164,28 @@ void CardboardQrCode_scanQrCodeAndSaveDeviceParams() {
   cardboard::qrcode::scanQrCodeAndSaveDeviceParams();
 }
 
-}  // extern "C"
+#ifdef HID_SENSOR
+void CardboardHidSensor_setUsbParams(int vid, int pid, int fd,
+        int busnum, int devaddr, const char *usbfs) {
+  cardboard::HidSensor *hid_sensor_ = cardboard::HidSensor::GetInstance();
+  hid_sensor_->setParams(vid, pid, fd, busnum, devaddr, usbfs);
+  bool init = hid_sensor_->init();
+  if (init) {
+    CARDBOARD_LOGI("hid init successfully");
+  } else {
+    CARDBOARD_LOGE("hid init failed");
+  }
+}
+
+void CardboardHidSensor_setUsbClose() {
+  cardboard::HidSensor *hid_sensor_ = cardboard::HidSensor::GetInstance();
+  hid_sensor_->close();
+}
+
+void CardboardHidSensor_setUsbExit() {
+  cardboard::HidSensor *hid_sensor_ = cardboard::HidSensor::GetInstance();
+  hid_sensor_->exit();
+}
+#endif
+
+}  // extern "C"cardboard::

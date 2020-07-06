@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #include "qr_code.h"
+#include "include/cardboard.h"
 
 namespace cardboard {
 namespace qrcode {
@@ -83,5 +84,18 @@ void scanQrCodeAndSaveDeviceParams() {
   env->CallVoidMethod(context_, startActivity, intentObject);
 }
 
+#ifdef HID_SENSOR
+void setUsbParams(int vid, int pid, int fd, int busnum, int devaddr, const char *usbfs) {
+  CardboardHidSensor_setUsbParams(vid, pid, fd, busnum, devaddr, usbfs);
+}
+
+void setUsbClose() {
+  CardboardHidSensor_setUsbClose();
+}
+
+void setUsbExit() {
+  CardboardHidSensor_setUsbExit();
+}
+#endif
 }  // namespace qrcode
 }  // namespace cardboard

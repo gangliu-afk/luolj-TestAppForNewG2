@@ -38,7 +38,7 @@
 
                 <!-- QR code sample image. Corresponds to g.co/cardboard QR code -->
                 <ImageView
-                    android:src="@drawable/qr_sample"
+                    android:contentDescription="TODO" android:src="@drawable/qr_sample"
                     android:layout_width="64dp"
                     android:layout_height="64dp"
                     android:layout_weight="0"/>
@@ -106,7 +106,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:src="@drawable/tick_marks" />
+                android:contentDescription="TODO" android:src="@drawable/tick_marks" />
         </LinearLayout>
     </RelativeLayout>
 </RelativeLayout>

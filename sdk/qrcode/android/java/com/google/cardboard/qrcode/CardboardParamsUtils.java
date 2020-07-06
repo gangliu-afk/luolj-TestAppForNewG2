@@ -33,7 +33,7 @@ import java.nio.ByteBuffer;
 /** Utility methods for managing configuration parameters. */
 public abstract class CardboardParamsUtils {
   static {
-    System.loadLibrary("cardboard_v1_jni");
+    System.loadLibrary("cardboard_api");
   }
 
   private static final String TAG = CardboardParamsUtils.class.getSimpleName();
@@ -302,5 +302,23 @@ public abstract class CardboardParamsUtils {
     }
   }
 
+  public static void setUsbFileDescriptor(int vid, int pid, int fd, int busnum, int devaddr, String usbfs_str) {
+    nativeSetUsbFileDescriptor(vid, pid, fd, busnum, devaddr, usbfs_str);
+  }
+
+  public static void setUsbClose(){
+    nativeSetUsbClose();
+  }
+
+  public static void setUsbExit() {
+    nativeSetUsbExit();
+  }
+
   private static native byte[] nativeGetCardboardV1DeviceParams();
+
+  private static native void nativeSetUsbFileDescriptor(int vid, int pid, int fd, int busnum, int devaddr, String usbfs_str);
+
+  private static native void nativeSetUsbClose();
+
+  private static native void nativeSetUsbExit();
 }
